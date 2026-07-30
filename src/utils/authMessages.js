@@ -1,5 +1,5 @@
 const roleLabels = {
-  client: 'client',
+  client: 'attendee',
   host: 'host',
   admin: 'admin',
 };

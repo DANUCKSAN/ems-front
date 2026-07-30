@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 675" role="img" aria-labelledby="title description">
+  <title id="title">EventHub event</title>
+  <desc id="description">EventHub branded event image placeholder</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#07111f"/>
+      <stop offset="0.55" stop-color="#0f3d46"/>
+      <stop offset="1" stop-color="#12243d"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#2dd4bf" stop-opacity=".38"/>
+      <stop offset="1" stop-color="#2dd4bf" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="675" fill="url(#background)"/>
+  <circle cx="220" cy="80" r="360" fill="url(#glow)"/>
+  <circle cx="1010" cy="620" r="400" fill="url(#glow)" opacity=".65"/>
+  <path d="M472 214h256a32 32 0 0 1 32 32v183a32 32 0 0 1-32 32H472a32 32 0 0 1-32-32V246a32 32 0 0 1 32-32Z" fill="none" stroke="#e5edf7" stroke-width="12" opacity=".92"/>
+  <path d="M504 190v52m192-52v52M440 288h320" fill="none" stroke="#5eead4" stroke-width="14" stroke-linecap="round"/>
+  <circle cx="525" cy="344" r="13" fill="#f5b82e"/><circle cx="600" cy="344" r="13" fill="#5eead4"/><circle cx="675" cy="344" r="13" fill="#f5b82e"/>
+  <text x="600" y="535" fill="#f8fafc" font-family="Arial, sans-serif" font-size="46" font-weight="700" text-anchor="middle" letter-spacing="3">EVENTHUB</text>
+</svg>

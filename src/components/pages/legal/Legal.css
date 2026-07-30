@@ -1,0 +1,13 @@
+.legal-page {
+  width: 100%;
+  padding: 48px 20px;
+}
+
+.legal-card {
+  width: min(860px, 100%);
+  margin: 0 auto;
+}
+
+.legal-card h2 {
+  margin-top: 28px;
+}

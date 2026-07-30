@@ -68,6 +68,20 @@
   gap: 12px;
 }
 
+.profile_menu_button {
+  display: inline-flex;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+}
+
+.profile_menu_button:focus-visible {
+  outline: 3px solid #2dd4bf;
+  outline-offset: 3px;
+}
+
 .user_greeting {
   color: #fff;
   font-size: 15px;
@@ -103,6 +117,12 @@
   padding: 20px 14px;
   transition: transform 0.3s ease, box-shadow 0.3s ease;
   cursor: pointer;
+  font: inherit;
+}
+
+.login-card:focus-visible {
+  outline: 3px solid #2dd4bf;
+  outline-offset: 3px;
 }
 
 .login-card:hover {

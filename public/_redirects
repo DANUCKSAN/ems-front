@@ -1,0 +1,3 @@
+# Serve the React application for client-side routes such as /event/:id.
+# Supported by Cloudflare Pages, Netlify, and compatible static hosts.
+/* /index.html 200

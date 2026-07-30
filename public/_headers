@@ -1,0 +1,18 @@
+# Baseline browser protections for static hosting. Configure a deployment-
+# specific Content-Security-Policy at the edge after substituting the exact API
+# and Stripe origins; a generic policy would either be ineffective or break API
+# requests.
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+  Strict-Transport-Security: max-age=31536000
+
+# Vite emits content-hashed assets, so they can be cached indefinitely.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# The application shell must revalidate so deployments become visible quickly.
+/index.html
+  Cache-Control: no-cache, no-store, must-revalidate

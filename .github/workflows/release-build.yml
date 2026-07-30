@@ -1,0 +1,83 @@
+name: Frontend Release Build
+
+run-name: Build ${{ inputs.environment }} artifact from ${{ github.ref_name }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: GitHub environment containing the public API origin
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frontend-release-build-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build ${{ inputs.environment }} artifact
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    environment:
+      name: ${{ inputs.environment }}
+    env:
+      RELEASE_ENVIRONMENT: ${{ inputs.environment }}
+      VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Validate release environment
+        run: npm run release:validate-env
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Test
+        run: npm test
+      - name: Audit all dependencies
+        run: npm run audit:all
+      - name: Build release bundle
+        run: npm run build
+      - name: Verify release bundle
+        run: npm run release:verify-bundle
+      - name: Package and checksum dist
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_artifact_name="eventhub-frontend-${RELEASE_ENVIRONMENT}-${GITHUB_SHA}"
+          tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
+            -czf "${release_artifact_name}.tar.gz" dist
+          sha256sum "${release_artifact_name}.tar.gz" > "${release_artifact_name}.tar.gz.sha256"
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        with:
+          subject-path: eventhub-frontend-${{ inputs.environment }}-${{ github.sha }}.tar.gz
+      - name: Upload verified release artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: eventhub-frontend-${{ inputs.environment }}-${{ github.sha }}
+          path: |
+            eventhub-frontend-${{ inputs.environment }}-${{ github.sha }}.tar.gz
+            eventhub-frontend-${{ inputs.environment }}-${{ github.sha }}.tar.gz.sha256
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: ${{ inputs.environment == 'production' && 90 || 14 }}
