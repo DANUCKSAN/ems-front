@@ -88,18 +88,6 @@
   font-size: 1.1rem;
 }
 
-.login-link-button {
-  border: 0;
-  background: transparent;
-  color: #1d4ed8;
-  cursor: pointer;
-  font-weight: 600;
-}
-
-.login-link-button:hover {
-  color: #102a43;
-}
-
 @keyframes fadeInLeft {
   from {
     opacity: 0;

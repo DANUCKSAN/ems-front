@@ -50,13 +50,29 @@ const errorMessage = (payload, response) => {
 };
 
 export class ApiError extends Error {
-  constructor(message, status, payload) {
+  constructor(message, status, payload, retryAfterSeconds = null) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.payload = payload;
+    this.retryAfterSeconds = retryAfterSeconds;
   }
 }
+
+const readRetryAfterSeconds = (response) => {
+  const rawValue = response.headers?.get?.('Retry-After');
+  if (!rawValue) {
+    return null;
+  }
+
+  const seconds = Number(rawValue);
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return seconds;
+  }
+
+  const retryAt = Date.parse(rawValue);
+  return Number.isNaN(retryAt) ? null : Math.max(Math.ceil((retryAt - Date.now()) / 1000), 0);
+};
 
 export const apiRequest = async (path, options = {}) => {
   const { auth = true, body, headers: customHeaders = {}, ...fetchOptions } = options;
@@ -92,7 +108,12 @@ export const apiRequest = async (path, options = {}) => {
       window.dispatchEvent(new Event('storage'));
       window.dispatchEvent(new CustomEvent('auth:unauthorized', { detail: { role } }));
     }
-    throw new ApiError(errorMessage(payload, response), response.status, payload);
+    throw new ApiError(
+      errorMessage(payload, response),
+      response.status,
+      payload,
+      readRetryAfterSeconds(response)
+    );
   }
 
   return payload;

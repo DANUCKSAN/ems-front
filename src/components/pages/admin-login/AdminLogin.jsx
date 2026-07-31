@@ -5,23 +5,36 @@ import { useNavigate } from 'react-router-dom';
 import '../login/Login.css';
 import './AdminLogin.css';
 import logo from '../../../assets/logo.svg';
+import MfaVerificationStep from '../../auth/MfaVerificationStep';
 import { getAuthErrorMessage } from '../../../utils/authMessages';
 import { saveAuthSession } from '../../../utils/authSession';
 import { apiPost } from '../../../utils/api';
+import { assertMfaChallenge } from '../../../utils/mfaChallenge';
 
 const AdminLogin = () => {
   const navigate = useNavigate();
+  const [form] = Form.useForm();
   const [challenge, setChallenge] = useState(null);
   const [loading, setLoading] = useState(false);
   const [mfaLoading, setMfaLoading] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [credentials, setCredentials] = useState(null);
   const [authError, setAuthError] = useState('');
 
   const startLogin = async (values) => {
+    const loginCredentials = {
+      email: values.email.trim(),
+      password: values.password,
+    };
     setLoading(true);
     setAuthError('');
     try {
-      const payload = await apiPost('/api/admin/login', values, { auth: false });
+      const payload = assertMfaChallenge(
+        await apiPost('/api/admin/login', loginCredentials, { auth: false })
+      );
       setChallenge(payload);
+      setCredentials(loginCredentials);
+      form.setFieldValue('code', undefined);
       message.success(payload.message || 'Verification code sent');
     } catch (error) {
       const friendlyMessage = getAuthErrorMessage(error, 'admin');
@@ -29,6 +42,31 @@ const AdminLogin = () => {
       message.error(friendlyMessage);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const resendMfa = async () => {
+    if (!credentials) {
+      setChallenge(null);
+      setAuthError('Please enter your admin email and password again.');
+      return;
+    }
+
+    setResendLoading(true);
+    setAuthError('');
+    try {
+      const payload = assertMfaChallenge(
+        await apiPost('/api/admin/login', credentials, { auth: false })
+      );
+      setChallenge(payload);
+      form.setFieldValue('code', undefined);
+      message.success(payload.message || 'A new verification code was sent');
+    } catch (error) {
+      const friendlyMessage = getAuthErrorMessage(error, 'admin', 'resend');
+      setAuthError(friendlyMessage);
+      message.error(friendlyMessage);
+    } finally {
+      setResendLoading(false);
     }
   };
 
@@ -45,10 +83,11 @@ const AdminLogin = () => {
         { auth: false }
       );
       saveAuthSession(payload, 'admin');
+      setCredentials(null);
       message.success('Admin login successful');
       navigate('/admin-dashboard');
     } catch (error) {
-      const friendlyMessage = getAuthErrorMessage(error, 'admin');
+      const friendlyMessage = getAuthErrorMessage(error, 'admin', 'mfa');
       setAuthError(friendlyMessage);
       message.error(friendlyMessage);
     } finally {
@@ -66,6 +105,7 @@ const AdminLogin = () => {
 
       <div className="login-right">
         <Form
+          form={form}
           name="admin-login"
           className="login-form"
           onFinish={challenge ? verifyMfa : startLogin}
@@ -73,7 +113,7 @@ const AdminLogin = () => {
           <h2 className="login-form-title">{challenge ? 'Verify Admin Login' : 'Admin Login'}</h2>
           <p className="login-form-subtitle">
             {challenge
-              ? `Enter the verification code sent to ${challenge.maskedEmail}.`
+              ? `Enter the verification code sent to ${challenge.maskedEmail || 'your email address'}.`
               : 'Sign in with your admin account, then confirm the one-time verification code.'}
           </p>
 
@@ -83,20 +123,6 @@ const AdminLogin = () => {
               type="error"
               showIcon
               message={authError}
-            />
-          )}
-
-          {challenge && (
-            <Alert
-              className="mfa-alert"
-              type="info"
-              showIcon
-              message={challenge.message}
-              description={
-                <div className="mfa-alert-content">
-                  <p>Code expires at {new Date(challenge.expiresAt).toLocaleTimeString()}.</p>
-                </div>
-              }
             />
           )}
 
@@ -120,25 +146,22 @@ const AdminLogin = () => {
               </Form.Item>
             </>
           ) : (
-            <Form.Item
-              name="code"
-              rules={[
-                { required: true, message: 'Please enter your verification code!' },
-                { len: 6, message: 'Verification code must be 6 digits' },
-              ]}
-            >
-              <Input
-                maxLength={6}
-                placeholder="Enter 6-digit verification code"
-                className="mfa-code-input"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-              />
-            </Form.Item>
+            <MfaVerificationStep
+              challenge={challenge}
+              resendLoading={resendLoading}
+              verificationLoading={mfaLoading}
+              onResend={resendMfa}
+            />
           )}
 
           <Form.Item>
-            <Button type="primary" htmlType="submit" block loading={challenge ? mfaLoading : loading}>
+            <Button
+              type="primary"
+              htmlType="submit"
+              block
+              loading={challenge ? mfaLoading : loading}
+              disabled={Boolean(challenge && resendLoading)}
+            >
               {challenge ? 'Verify and Continue' : 'Continue to Verification'}
             </Button>
             <div className="admin-auth-link-row">
@@ -146,9 +169,12 @@ const AdminLogin = () => {
                 <button
                   type="button"
                   className="login-link-button"
+                  disabled={resendLoading || mfaLoading}
                   onClick={() => {
                     setChallenge(null);
+                    setCredentials(null);
                     setAuthError('');
+                    form.resetFields();
                   }}
                 >
                   Use a different admin account

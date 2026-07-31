@@ -6,27 +6,38 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import './Login.css';
 
 import logoImage from '../../../assets/logo.svg';
+import MfaVerificationStep from '../../auth/MfaVerificationStep';
 import { getAuthErrorMessage } from '../../../utils/authMessages';
 import { saveAuthSession } from '../../../utils/authSession';
 import { apiPost } from '../../../utils/api';
+import { assertMfaChallenge } from '../../../utils/mfaChallenge';
 
 const Login = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [mfaLoading, setMfaLoading] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
   const [challenge, setChallenge] = useState(null);
-  const [email, setEmail] = useState('');
+  const [credentials, setCredentials] = useState(null);
   const [authError, setAuthError] = useState('');
 
   // Get redirect path if coming from an event
   const onFinish = async (values) => {
+    const loginCredentials = {
+      email: values.email.trim(),
+      password: values.password,
+    };
     setLoading(true);
     setAuthError('');
     try {
-      const data = await apiPost('/api/login', values, { auth: false });
+      const data = assertMfaChallenge(
+        await apiPost('/api/login', loginCredentials, { auth: false })
+      );
       setChallenge(data);
-      setEmail(values.email);
+      setCredentials(loginCredentials);
+      form.setFieldValue('code', undefined);
       message.success(data.message || 'Verification code sent');
     } catch (error) {
       const friendlyMessage = getAuthErrorMessage(error, 'client');
@@ -34,6 +45,31 @@ const Login = () => {
       message.error(friendlyMessage);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const resendMfa = async () => {
+    if (!credentials) {
+      setChallenge(null);
+      setAuthError('Please enter your email and password again.');
+      return;
+    }
+
+    setResendLoading(true);
+    setAuthError('');
+    try {
+      const data = assertMfaChallenge(
+        await apiPost('/api/login', credentials, { auth: false })
+      );
+      setChallenge(data);
+      form.setFieldValue('code', undefined);
+      message.success(data.message || 'A new verification code was sent');
+    } catch (error) {
+      const friendlyMessage = getAuthErrorMessage(error, 'client', 'resend');
+      setAuthError(friendlyMessage);
+      message.error(friendlyMessage);
+    } finally {
+      setResendLoading(false);
     }
   };
 
@@ -50,6 +86,7 @@ const Login = () => {
         { auth: false }
       );
       saveAuthSession(data, 'user');
+      setCredentials(null);
       message.success('Login successful');
 
       const requestedRedirect = localStorage.getItem('redirectAfterLogin') || location.state?.redirectTo;
@@ -61,7 +98,7 @@ const Login = () => {
         navigate('/', { replace: true });
       }
     } catch (error) {
-      const friendlyMessage = getAuthErrorMessage(error, 'client');
+      const friendlyMessage = getAuthErrorMessage(error, 'client', 'mfa');
       setAuthError(friendlyMessage);
       message.error(friendlyMessage);
     } finally {
@@ -80,6 +117,7 @@ const Login = () => {
       </div>
       <div className="login-right">
         <Form
+          form={form}
           name="login"
           onFinish={challenge ? verifyMfa : onFinish}
           className="login-form"
@@ -87,7 +125,7 @@ const Login = () => {
           <h2 className="login-form-title">{challenge ? 'Verify your sign-in' : 'Attendee sign in'}</h2>
           <p className="login-form-subtitle">
             {challenge
-              ? `Enter the code sent to ${challenge.maskedEmail || email}.`
+              ? `Enter the code sent to ${challenge.maskedEmail || 'your email address'}.`
               : 'Sign in with your password, then confirm the one-time code.'}
           </p>
 
@@ -100,26 +138,15 @@ const Login = () => {
             />
           )}
 
-          {challenge && (
-            <Alert
-              className="mfa-alert"
-              type="info"
-              showIcon
-              message={challenge.message}
-              description={
-                <div className="mfa-alert-content">
-                  <p>Code expires at {new Date(challenge.expiresAt).toLocaleTimeString()}.</p>
-                </div>
-              }
-            />
-          )}
-
           {!challenge ? (
             <>
               <Form.Item
                 name="email"
                 label="Email"
-                rules={[{ required: true, message: 'Please input your Email!' }]}
+                rules={[
+                  { required: true, message: 'Please input your Email!' },
+                  { type: 'email', message: 'Enter a valid email address' },
+                ]}
               >
                 <Input prefix={<UserOutlined />} placeholder="Email" autoComplete="email" />
               </Form.Item>
@@ -133,26 +160,22 @@ const Login = () => {
               </Form.Item>
             </>
           ) : (
-            <Form.Item
-              name="code"
-              label="Verification code"
-              rules={[
-                { required: true, message: 'Please enter your verification code!' },
-                { len: 6, message: 'Verification code must be 6 digits' },
-              ]}
-            >
-              <Input
-                maxLength={6}
-                placeholder="Enter 6-digit verification code"
-                className="mfa-code-input"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-              />
-            </Form.Item>
+            <MfaVerificationStep
+              challenge={challenge}
+              resendLoading={resendLoading}
+              verificationLoading={mfaLoading}
+              onResend={resendMfa}
+            />
           )}
 
           <Form.Item>
-            <Button block type="primary" htmlType="submit" loading={challenge ? mfaLoading : loading}>
+            <Button
+              block
+              type="primary"
+              htmlType="submit"
+              loading={challenge ? mfaLoading : loading}
+              disabled={Boolean(challenge && resendLoading)}
+            >
               {challenge ? 'Verify Code' : 'Continue to Verification'}
             </Button>
             <div style={{ marginTop: 12, textAlign: 'center' }}>
@@ -160,10 +183,12 @@ const Login = () => {
                 <button
                   type="button"
                   className="login-link-button"
+                  disabled={resendLoading || mfaLoading}
                   onClick={() => {
                     setChallenge(null);
-                    setEmail('');
+                    setCredentials(null);
                     setAuthError('');
+                    form.resetFields();
                   }}
                 >
                   Use a different email

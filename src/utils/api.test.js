@@ -2,9 +2,10 @@ import { vi } from 'vitest';
 import { API_BASE_URL, apiGet, apiPost, ApiError } from './api';
 import { getAuthToken, saveAuthSession } from './authSession';
 
-const jsonResponse = (status, payload) => ({
+const jsonResponse = (status, payload, headers = {}) => ({
   ok: status >= 200 && status < 300,
   status,
+  headers: new Headers(headers),
   text: vi.fn().mockResolvedValue(payload === null ? '' : JSON.stringify(payload)),
 });
 
@@ -74,5 +75,21 @@ describe('API client', () => {
       message: 'The service could not be reached. Please check your connection and try again.',
     }));
     await expect(apiGet('/api/events', { auth: false })).rejects.toBeInstanceOf(ApiError);
+  });
+
+  it('preserves the server retry delay on an MFA cooldown response', async () => {
+    fetch.mockResolvedValue(jsonResponse(
+      429,
+      { error: 'mfa_resend_too_soon' },
+      { 'Retry-After': '37' }
+    ));
+
+    await expect(apiPost('/api/login', {}, { auth: false })).rejects.toEqual(
+      expect.objectContaining({
+        status: 429,
+        retryAfterSeconds: 37,
+        payload: { error: 'mfa_resend_too_soon' },
+      })
+    );
   });
 });
