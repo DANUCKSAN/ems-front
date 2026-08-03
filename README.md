@@ -128,9 +128,10 @@ The browser route guards improve navigation, but the backend remains the securit
 2. The client requests `POST /api/payments/checkout-session` with a unique `Idempotency-Key`.
 3. Free bookings are confirmed immediately by the backend.
 4. Paid bookings redirect to Stripe Checkout; EventHub never collects or stores card details.
-5. Stripe returns to `/booking-confirmation?session_id=...`.
-6. The client reconciles the checkout session and loads the authenticated booking record.
-7. Stripe webhooks remain authoritative for payment and refund state.
+5. A customer who cancels Checkout returns to the event and can resume the same owned, still-open Session while the seat hold is active.
+6. Successful Checkout returns to `/booking-confirmation?session_id=...`.
+7. The client reconciles immediately, briefly polls while delayed payment is pending, and displays distinct confirmed, failed, expired, refund, and manual-review states.
+8. Signed Stripe webhooks remain authoritative for payment and refund state.
 
 ## Deployment
 

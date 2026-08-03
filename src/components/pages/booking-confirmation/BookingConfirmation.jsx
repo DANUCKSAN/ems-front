@@ -22,9 +22,17 @@ import {
 } from '@ant-design/icons';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { apiGet } from '../../../utils/api';
+import {
+  getBookingConfirmationPresentation,
+  getBookingTagColor,
+  getPaymentTagColor,
+  isTerminalBookingStatus,
+} from '../../../utils/bookingPayment';
 import './BookingConfirmation.css';
 
 const { Title, Text } = Typography;
+const CHECKOUT_POLL_ATTEMPTS = 5;
+const CHECKOUT_POLL_INTERVAL_MS = 1500;
 
 const formatCurrency = (amount) =>
   new Intl.NumberFormat('en-AU', {
@@ -51,6 +59,11 @@ const BookingConfirmation = () => {
 
   useEffect(() => {
     let cancelled = false;
+    let hasLoaded = false;
+
+    const waitBeforeRetry = () => new Promise((resolve) => {
+      window.setTimeout(resolve, CHECKOUT_POLL_INTERVAL_MS);
+    });
 
     const loadConfirmation = async () => {
       try {
@@ -61,25 +74,39 @@ const BookingConfirmation = () => {
           throw new Error('The booking reference is missing from this confirmation link.');
         }
 
-        const checkoutStatus = sessionId
-          ? await apiGet(`/api/payments/checkout-session/${encodeURIComponent(sessionId)}`)
-          : null;
-        const bookingId = checkoutStatus?.bookingId || directBookingId;
-        if (!bookingId) {
-          throw new Error('The booking could not be resolved from this checkout session.');
-        }
+        const attempts = sessionId ? CHECKOUT_POLL_ATTEMPTS : 1;
+        for (let attempt = 0; attempt < attempts && !cancelled; attempt += 1) {
+          if (attempt > 0) {
+            await waitBeforeRetry();
+            if (cancelled) return;
+          }
 
-        const bookingDetails = await apiGet(`/api/bookings/${encodeURIComponent(bookingId)}`);
-        if (!cancelled) {
+          const checkoutStatus = sessionId
+            ? await apiGet(`/api/payments/checkout-session/${encodeURIComponent(sessionId)}`)
+            : null;
+          const bookingId = checkoutStatus?.bookingId || directBookingId;
+          if (!bookingId) {
+            throw new Error('The booking could not be resolved from this checkout session.');
+          }
+
+          const bookingDetails = await apiGet(`/api/bookings/${encodeURIComponent(bookingId)}`);
+          if (cancelled) return;
+
           setCheckout(checkoutStatus || {
             bookingId,
             bookingStatus: bookingDetails.status,
             paymentStatus: bookingDetails.paymentStatus,
           });
           setBooking(bookingDetails);
+          hasLoaded = true;
+          setLoading(false);
+
+          if (isTerminalBookingStatus(bookingDetails.status)) {
+            break;
+          }
         }
       } catch (loadError) {
-        if (!cancelled) {
+        if (!cancelled && !hasLoaded) {
           setError(loadError.message || 'Unable to load booking confirmation');
         }
       } finally {
@@ -122,17 +149,18 @@ const BookingConfirmation = () => {
   const isConfirmed = booking.status === 'CONFIRMED';
   const paymentStatus = checkout?.paymentStatus || booking.paymentStatus || 'PENDING';
   const reference = booking.reference || booking.bookingReference || booking.id;
+  const presentation = getBookingConfirmationPresentation(booking);
+  const bookingTagColor = getBookingTagColor(booking.status);
+  const paymentTagColor = getPaymentTagColor(paymentStatus);
 
   return (
     <div className="booking-confirmation-page">
       <div className="booking-confirmation-shell">
         <Result
-          status={isConfirmed ? 'success' : 'info'}
+          status={presentation.resultStatus}
           icon={isConfirmed ? <CheckCircleFilled /> : undefined}
-          title={isConfirmed ? 'Booking confirmed' : 'Payment is processing'}
-          subTitle={isConfirmed
-            ? `Your reservation for ${booking.eventTitle} is confirmed.`
-            : 'Your checkout status is still being reconciled. Check My Events shortly; only a confirmed booking is valid for entry.'}
+          title={presentation.title}
+          subTitle={presentation.subtitle}
           extra={[
             <Button key="events" type="primary"><Link to="/">Explore more events</Link></Button>,
             <Button key="my-events"><Link to="/my-events">View my events</Link></Button>,
@@ -146,8 +174,8 @@ const BookingConfirmation = () => {
               <Space direction="vertical" size={20} className="full-width">
                 <div className="confirmation-header">
                   <Space wrap>
-                    <Tag color={isConfirmed ? 'green' : 'gold'}>{booking.status}</Tag>
-                    <Tag color={paymentStatus === 'PAID' || paymentStatus === 'NO_PAYMENT_REQUIRED' ? 'green' : 'blue'}>
+                    <Tag color={bookingTagColor}>{booking.status}</Tag>
+                    <Tag color={paymentTagColor}>
                       Payment: {paymentStatus}
                     </Tag>
                   </Space>

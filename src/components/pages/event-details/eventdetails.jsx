@@ -74,6 +74,7 @@ const EventDetails = () => {
   const [quantity, setQuantity] = useState(1);
   const [loading, setLoading] = useState(true);
   const [booking, setBooking] = useState(false);
+  const [resumingCheckout, setResumingCheckout] = useState(false);
   const [error, setError] = useState('');
   const [reviews, setReviews] = useState([]);
   const [reviewLoading, setReviewLoading] = useState(false);
@@ -83,6 +84,10 @@ const EventDetails = () => {
   const [selectedSeats, setSelectedSeats] = useState([]);
   const checkoutRequestKey = useRef(null);
   const [reviewForm] = Form.useForm();
+  const returnQuery = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const cancelledBookingId = returnQuery.get('payment') === 'cancelled'
+    ? returnQuery.get('booking_id')
+    : null;
 
   const user = useMemo(() => {
     try {
@@ -236,6 +241,43 @@ const EventDetails = () => {
     }
   };
 
+  const handleResumeCheckout = async () => {
+    if (!user?.id) {
+      const returnPath = `/event/${id}${location.search}`;
+      localStorage.setItem('redirectAfterLogin', returnPath);
+      navigate('/login', { state: { redirectTo: returnPath } });
+      return;
+    }
+    if (!cancelledBookingId) {
+      messageApi.error('The cancelled checkout could not be identified. Please start again.');
+      return;
+    }
+
+    try {
+      setResumingCheckout(true);
+      const payload = await apiPost(
+        `/api/payments/checkout-session/${encodeURIComponent(cancelledBookingId)}/resume`,
+        null
+      );
+      if (payload.requiresPayment) {
+        if (!payload.checkoutUrl) {
+          throw new Error('Secure checkout is temporarily unavailable. Please try again.');
+        }
+        window.location.assign(payload.checkoutUrl);
+        return;
+      }
+
+      const confirmationQuery = payload.checkoutSessionId
+        ? `session_id=${encodeURIComponent(payload.checkoutSessionId)}`
+        : `bookingId=${encodeURIComponent(payload.bookingId)}`;
+      navigate(`/booking-confirmation?${confirmationQuery}`, { replace: true });
+    } catch (resumeError) {
+      messageApi.error(resumeError.message || 'Checkout could not be resumed');
+    } finally {
+      setResumingCheckout(false);
+    }
+  };
+
   const handleReviewSubmit = async (values) => {
     if (!user?.id) {
       localStorage.setItem('redirectAfterLogin', `/event/${id}`);
@@ -377,6 +419,25 @@ const EventDetails = () => {
                     showIcon
                     message="Sign in before checkout"
                     description="We'll keep your place in the flow and return you here after login."
+                  />
+                )}
+
+                {cancelledBookingId && (
+                  <Alert
+                    type="warning"
+                    showIcon
+                    message="Checkout was cancelled"
+                    description="Your selected seats remain reserved for a limited time. Resume the same secure checkout to keep them, or let the reservation expire."
+                    action={(
+                      <Button
+                        size="small"
+                        type="primary"
+                        loading={resumingCheckout}
+                        onClick={handleResumeCheckout}
+                      >
+                        Resume checkout
+                      </Button>
+                    )}
                   />
                 )}
 
