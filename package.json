@@ -7,9 +7,9 @@
     "npm": ">=10.0.0"
   },
   "dependencies": {
-    "@ant-design/icons": "^5.6.1",
+    "@ant-design/icons": "^6.3.2",
     "@ant-design/v5-patch-for-react-19": "^1.0.3",
-    "antd": "^5.26.7",
+    "antd": "^6.5.3",
     "aos": "^2.3.4",
     "dayjs": "^1.11.13",
     "gsap": "^3.15.0",
